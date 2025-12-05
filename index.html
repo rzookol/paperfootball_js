@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Paper Football HTML5</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="layout">
+    <section class="panel">
+      <h1>Piłkarzyki na kartce</h1>
+      <p>
+        Odświeżona wersja gry SDL działa teraz w przeglądarce. Kliknij sąsiedni
+        węzeł, aby poprowadzić linię z piłką. Jeśli trafisz w ścianę lub
+        istniejące skrzyżowanie, ruch wraca do ciebie – inaczej gra przechodzi do
+        rywala. Celem jest dotarcie piłką do bramki przeciwnika (góra vs dół).
+      </p>
+      <div class="status">
+        <div class="status__item"><span>Aktualny gracz:</span><strong id="currentPlayer">Czerwony</strong></div>
+        <div class="status__item"><span>Pozycja piłki:</span><strong id="ballPosition">7, 9</strong></div>
+        <div class="status__item"><span>Wynik:</span><strong id="score">0 : 0</strong></div>
+        <div class="status__item status__hint" id="hint"></div>
+      </div>
+      <div class="controls">
+        <button id="reset">Nowa gra</button>
+        <button id="undo">Cofnij ruch</button>
+      </div>
+    </section>
+    <section class="board">
+      <canvas id="field" width="600" height="720" aria-label="plansza do gry"></canvas>
+    </section>
+  </main>
+  <script src="game.js"></script>
+</body>
+</html>
