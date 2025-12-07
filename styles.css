@@ -92,6 +92,27 @@ body {
   gap: 0.75rem;
 }
 
+.difficulty {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 700;
+  color: var(--muted);
+  background: #f4f8fa;
+  border: 1px solid #e4edf3;
+  border-radius: 10px;
+  padding: 0.55rem 0.8rem;
+}
+
+.difficulty select {
+  border: none;
+  background: transparent;
+  font-weight: 700;
+  color: var(--text);
+  padding: 0.2rem 0.4rem;
+  border-radius: 6px;
+}
+
 button {
   background: linear-gradient(135deg, #11998e, #38ef7d);
   color: #fff;

@@ -8,6 +8,8 @@ const margin = 36;
 const goalColumns = [6, 7, 8];
 const cpuEnabled = true;
 const cpuPlayer = 1;
+const difficultySelect = document.getElementById("difficulty");
+let cpuDifficulty = difficultySelect?.value || "weak";
 
 const players = [
   { name: "Czerwony", color: getComputedStyle(document.documentElement).getPropertyValue("--player-a") || "#e54848" },
@@ -122,22 +124,29 @@ function isEdge(position) {
   );
 }
 
-function addSegment(start, end, color) {
+function addSegmentToState(state, start, end, color) {
   const key = segmentKey(start, end);
-  usedLines.add(key);
-  segments.push({ a: { ...start }, b: { ...end }, color });
+  state.usedLines.add(key);
+  if (color) {
+    state.segments?.push({ a: { ...start }, b: { ...end }, color });
+  }
 
   const aKey = nodeKey(start);
   const bKey = nodeKey(end);
-  nodeDegree.set(aKey, (nodeDegree.get(aKey) || 0) + 1);
-  nodeDegree.set(bKey, (nodeDegree.get(bKey) || 0) + 1);
+  state.nodeDegree.set(aKey, (state.nodeDegree.get(aKey) || 0) + 1);
+  state.nodeDegree.set(bKey, (state.nodeDegree.get(bKey) || 0) + 1);
 }
 
-function lineExists(start, end) {
-  return usedLines.has(segmentKey(start, end));
+function addSegment(start, end, color) {
+  addSegmentToState({ usedLines, nodeDegree, segments }, start, end, color);
 }
 
-function availableMoves(from) {
+function lineExists(start, end, lineSet = usedLines) {
+  return lineSet.has(segmentKey(start, end));
+}
+
+function availableMoves(from, stateOverrides = {}) {
+  const lineSet = stateOverrides.usedLines || usedLines;
   const moves = [];
   const directions = [
     { dx: 1, dy: 0 },
@@ -163,7 +172,7 @@ function availableMoves(from) {
         (from.y === rows - 1 && dy === -1 && dx === 0);
       if (!inwardFromEdge && (dx === 0 || dy === 0)) return;
     }
-    if (lineExists(from, target)) return;
+    if (lineExists(from, target, lineSet)) return;
     moves.push(target);
   });
 
@@ -255,25 +264,95 @@ function handleClick(event) {
   }
 }
 
-function evaluateCpuMove(target) {
-  const goalY = currentPlayer === 0 ? rows - 1 : 0;
+function evaluateHeuristic(target, playerPerspective, degreeMap = nodeDegree) {
+  const goalY = playerPerspective === 0 ? rows - 1 : 0;
   const goalCenterX = goalColumns[Math.floor(goalColumns.length / 2)];
   const distanceY = Math.abs(goalY - target.y);
   const distanceX = Math.abs(goalCenterX - target.x);
-  const bounceBonus = willBounce(target) ? -0.5 : 0;
+  const bounceBonus = willBounce(target, degreeMap.get(nodeKey(target)) || 0) ? -0.5 : 0;
   return distanceY + distanceX * 0.2 + bounceBonus;
 }
 
-function chooseCpuMove() {
+function chooseCpuMoveWeak() {
   const moves = availableMoves(ball);
   if (moves.length === 0) return null;
-  return moves.reduce((best, move) => {
-    const score = evaluateCpuMove(move);
-    if (!best || score < best.score) {
-      return { move, score };
+  const ranked = moves
+    .map((move) => ({ move, score: evaluateHeuristic(move, currentPlayer) }))
+    .sort((a, b) => a.score - b.score);
+  return ranked[0].move;
+}
+
+function cloneSearchState() {
+  return {
+    ball: { ...ball },
+    usedLines: new Set([...usedLines]),
+    nodeDegree: new Map(nodeDegree),
+  };
+}
+
+function applyMove(state, move, playerTurn) {
+  const nextState = {
+    ball: { ...move },
+    usedLines: new Set([...state.usedLines]),
+    nodeDegree: new Map(state.nodeDegree),
+  };
+
+  addSegmentToState(nextState, state.ball, move);
+  const goalOwner = isGoal(move);
+  const bounced = willBounce(move, nextState.nodeDegree.get(nodeKey(move)) || 0);
+  const nextPlayer = goalOwner !== null || bounced ? playerTurn : (playerTurn + 1) % players.length;
+  return { state: nextState, goalOwner, nextPlayer };
+}
+
+function minimax(state, depth, playerTurn, maximizingPlayer) {
+  const moves = availableMoves(state.ball, state);
+  if (depth === 0 || moves.length === 0) {
+    if (moves.length === 0) {
+      return playerTurn === cpuPlayer ? -1000 : 1000;
     }
-    return best;
-  }, null).move;
+    return -evaluateHeuristic(state.ball, maximizingPlayer, state.nodeDegree);
+  }
+
+  let best = maximizingPlayer === cpuPlayer ? -Infinity : Infinity;
+
+  for (const move of moves) {
+    const { state: nextState, goalOwner, nextPlayer } = applyMove(state, move, playerTurn);
+    if (goalOwner !== null) {
+      const score = goalOwner === cpuPlayer ? 1500 : -1500;
+      best = maximizingPlayer === cpuPlayer ? Math.max(best, score) : Math.min(best, score);
+      continue;
+    }
+
+    const score = minimax(nextState, depth - 1, nextPlayer, maximizingPlayer);
+    best = maximizingPlayer === cpuPlayer ? Math.max(best, score) : Math.min(best, score);
+  }
+
+  return best;
+}
+
+function chooseCpuMoveStrong() {
+  const moves = availableMoves(ball);
+  if (moves.length === 0) return null;
+  const state = cloneSearchState();
+
+  let bestMove = null;
+  let bestScore = -Infinity;
+  for (const move of moves) {
+    const { state: nextState, goalOwner, nextPlayer } = applyMove(state, move, currentPlayer);
+    let score;
+    if (goalOwner !== null) {
+      score = goalOwner === cpuPlayer ? 2000 : -2000;
+    } else {
+      score = minimax(nextState, 3, nextPlayer, cpuPlayer);
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestMove = move;
+    }
+  }
+
+  return bestMove;
 }
 
 function maybePlayCpuTurn() {
@@ -282,7 +361,7 @@ function maybePlayCpuTurn() {
   let guard = 0;
   while (cpuEnabled && currentPlayer === cpuPlayer && guard < 50) {
     guard += 1;
-    const move = chooseCpuMove();
+    const move = cpuDifficulty === "strong" ? chooseCpuMoveStrong() : chooseCpuMoveWeak();
     if (!move) {
       checkForBlock();
       return;
@@ -435,6 +514,13 @@ controls.undo.addEventListener("click", () => {
   restoreState(last);
   announce("Cofnięto ruch");
 });
+
+if (difficultySelect) {
+  difficultySelect.addEventListener("change", (event) => {
+    cpuDifficulty = event.target.value;
+    announce(`Tryb SI: ${cpuDifficulty === "strong" ? "Mocny" : "Słaby"}`);
+  });
+}
 
 canvas.addEventListener("click", handleClick);
 
